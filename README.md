@@ -20,6 +20,7 @@ How to debug:
 - **tests/translate-gui.html** --> applyTransformation (from Tamnhi) takes in inputs from the GUI to translate/rotate the object.
 - **tests/webgl_geometry_teapot.html** --> what I based the frontend off of originally (stolen from [https://threejs.org/examples/#webgl_geometry_teapot](https://threejs.org/examples/#webgl_geometry_teapot))
 
+### Backend Files
 - **backend** --> where the JavaScript versions of the C files are!
 - **build** and **jsm** and **textures** --> this is the main backend (don't mess with this at all)
 - **models** --> you can add .dae files here to load into the frontend!
