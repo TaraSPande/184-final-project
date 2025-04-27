@@ -31,34 +31,93 @@ struct Vec3 {
     }
 };
 
-class MeshDeformation {
-    // Interpolate vertex positions using Bézier curves
-    static void bezierInterpolate(const std::vector<Vec3>& start, const std::vector<Vec3>& end, float t, std::vector<Vec3>& result) {
-        result.clear();
-        for (size_t i = 0; i < start.size(); ++i) {
-            Vec3 interpolated = start[i] * (1 - t) + end[i] * t;
-            result.push_back(interpolated);
-        }
-    }
-    
-    // Apply Laplacian smoothing to mesh vertices
-    static void laplacianSmoothing(std::vector<Vec3>& vertices, const std::vector<std::vector<int> >& adjacencyList, int iterations) {
-        std::vector<Vec3> smoothed(vertices.size());
-        for (int iter = 0; iter < iterations; ++iter) {
-            for (size_t i = 0; i < vertices.size(); ++i) {
-                Vec3 sum(0, 0, 0);
-                int count = 0;
-                for (int neighbor : adjacencyList[i]) {
-                    sum = sum + vertices[neighbor];
-                    ++count;
-                }
-                smoothed[i] = sum * (1.0f / count);
-            }
-            // Apply smoothed vertices back to the og
-            vertices = smoothed;
-        }
-    }
+enum InterpolationType {
+    Linear,
+    QuadraticBezier,
+    CubicBezier
 };
+
+Vec3 interpolateLinear(const Vec3& a, const Vec3& b, float t) {
+    return a * (1 - t) + b * t;
+}
+
+Vec3 interpolateQuadraticBezier(const Vec3& a, const Vec3& b, const Vec3& control, float t) {
+    Vec3 ab = interpolateLinear(a, control, t);
+    Vec3 bc = interpolateLinear(control, b, t);
+    return interpolateLinear(ab, bc, t);
+}
+
+Vec3 interpolateCubicBezier(const Vec3& a, const Vec3& b, const Vec3& c1, const Vec3& c2, float t) {
+    Vec3 ab = interpolateLinear(a, c1, t);
+    Vec3 bc = interpolateLinear(c1, c2, t);
+    Vec3 cd = interpolateLinear(c2, b, t);
+    Vec3 abc = interpolateLinear(ab, bc, t);
+    Vec3 bcd = interpolateLinear(bc, cd, t);
+    return interpolateLinear(abc, bcd, t);
+}
+
+std::vector<Vec3> morphMeshes(
+    const std::vector<Vec3>& meshA,
+    const std::vector<Vec3>& meshB,
+    const std::vector<int>& correspondence,
+    float t,
+    InterpolationType method
+) {
+    std::vector<Vec3> result;
+    for (size_t i = 0; i < meshA.size(); ++i) {
+        Vec3 a = meshA[i];
+        Vec3 b = meshB[correspondence[i]];
+        Vec3 morphed;
+        switch (method) {
+            case Linear:
+                morphed = interpolateLinear(a, b, t);
+                break;
+            case QuadraticBezier: {
+                Vec3 control = interpolateLinear(a, b, 0.5f);
+                morphed = interpolateQuadraticBezier(a, b, control, t);
+                break;
+            }
+            case CubicBezier: {
+                Vec3 c1 = interpolateLinear(a, b, 0.33f);
+                Vec3 c2 = interpolateLinear(a, b, 0.66f);
+                morphed = interpolateCubicBezier(a, b, c1, c2, t);
+                break;
+            }
+        }
+        result.push_back(morphed);
+    }
+    return result;
+}
+
+class MeshDeformation {
+    public:
+        static void linearInterpolateMeshes(const std::vector<Vec3>& start, const std::vector<Vec3>& end, float t, std::vector<Vec3>& result) {
+            // renamed from bezierInterpolate
+            result.clear();
+            for (size_t i = 0; i < start.size(); ++i) {
+                result.push_back(start[i] * (1 - t) + end[i] * t);
+            }
+        }
+    
+        static void laplacianSmoothing(std::vector<Vec3>& vertices, const std::vector<std::vector<int> >& adjacencyList, int iterations) {
+            std::vector<Vec3> smoothed(vertices.size());
+            for (int iter = 0; iter < iterations; ++iter) {
+                for (size_t i = 0; i < vertices.size(); ++i) {
+                    Vec3 sum(0, 0, 0);
+                    int count = 0;
+                    for (int neighbor : adjacencyList[i]) {
+                        sum = sum + vertices[neighbor];
+                        ++count;
+                    }
+                    if (count > 0)
+                        smoothed[i] = sum * (1.0f / count);
+                    else
+                        smoothed[i] = vertices[i];
+                }
+                vertices = smoothed;
+            }
+        }
+    };
 
 // Calculate centroid for set of points
 Vec3 calculateCentroid(const std::vector<Vec3>& points) {
