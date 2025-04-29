@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Mesh Morphing & Animation Toolkit</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link type="text/css" rel="stylesheet" href="main.css">
+	</head>
+	<body>
+		<div id="info">
+			Mesh Morphing & Animation Toolkit by Brandon Lai, Tamnhi Vu, Samuel German, Tara Pande
+		</div>
+
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "../build/three.module.js",
+					"three/addons/": "../jsm/"
+				}
+			}
+		</script>
+
+		<script type="module">
+			import * as THREE from 'three';
+			import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+			import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
+			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+			import { Vec3 } from '../backend/vertex.js';
+			import { morphMeshes } from '../backend/mesh_morphing.js';
+
+			let camera, scene, renderer, object;
+			let cameraControls;
+			let effectController;
+			let ambientLight, light;
+			let shading, textureCube;
+			const materials = {};
+
+			let startVertices = [];
+			let endVertices = [];
+			let morphMesh;
+
+			init();
+			render();
+
+			function init() {
+				const container = document.createElement('div');
+				document.body.appendChild(container);
+
+				// CAMERA
+				camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 80000);
+				camera.position.set(-1000, 900, -1200);
+
+				// LIGHTS
+				ambientLight = new THREE.AmbientLight(0x333333);
+
+				light = new THREE.DirectionalLight(0xFFFFFF, 1.0);
+				light.position.set(1000, 1000, -1000);
+
+				// RENDERER
+				renderer = new THREE.WebGLRenderer({ antialias: true });
+				renderer.setPixelRatio(window.devicePixelRatio);
+				renderer.setSize(window.innerWidth, window.innerHeight);
+				container.appendChild(renderer.domElement);
+
+				// EVENTS
+				window.addEventListener('resize', onWindowResize);
+
+				// CONTROLS
+				cameraControls = new OrbitControls(camera, renderer.domElement);
+				cameraControls.target.set(0, 0, 0);
+				cameraControls.addEventListener('change', render);
+
+				// SCENE
+				scene = new THREE.Scene();
+				scene.add(ambientLight);
+				scene.add(light);
+
+				// MATERIALS
+				materials.wireframe = new THREE.MeshBasicMaterial({ wireframe: true });
+				materials.flat = new THREE.MeshPhongMaterial({ specular: 0x000000, flatShading: true });
+				materials.smooth = new THREE.MeshPhongMaterial({ specular: 0x000000, flatShading: false });
+				materials.glossy = new THREE.MeshPhongMaterial({ specular: 0x555555, shininess: 100 });
+				materials.textured = new THREE.MeshPhongMaterial({ specular: 0x000000, map: textureCube });
+
+				// GUI
+				setupGui();
+			}
+
+			function setupGui() {
+				effectController = {
+					newShading: 'glossy',
+					// model: 'teapot.dae'
+					startModel: 'teapot.dae',
+				    	endModel: 'altered.dae',
+				    	morphAmount: 0 // Slider between 0 and 1
+				};
+
+				const gui = new GUI();
+				gui.add( effectController, 'newShading', [ 'wireframe', 'flat', 'smooth', 'glossy', 'textured', 'reflective' ] ).name( 'Shading' ).onChange( render );
+				// gui.add(effectController, 'model', [ 'teapot.dae', 'beetle.dae', 'cow.dae' ]).name('Model').onChange(() => {createNewObject();});
+				gui.add(effectController, 'startModel', [ 'teapot.dae', 'altered.dae', 'altered2.dae', 'bean.dae', 'beast.dae', 'quadball.dae' ]).name('Start Model').onChange(loadModels);
+				gui.add(effectController, 'endModel', [ 'teapot.dae', 'altered.dae', 'altered2.dae', 'bean.dae', 'beast.dae', 'quadball.dae' ]).name('End Model').onChange(loadModels);
+				gui.add(effectController, 'morphAmount', 0, 1).name('Morph').onChange(updateMorph);
+			}
+
+
+			function render() {
+
+				if (effectController.newShading !== shading ) {
+					shading = effectController.newShading;
+					createNewObject();
+				}
+
+				// skybox is rendered separately, so that it is always behind the teapot.
+				if ( shading === 'reflective' ) {
+					scene.background = textureCube;
+				} else {
+					scene.background = null;
+				}
+				renderer.render( scene, camera );
+			}
+
+			// Whenever the teapot changes, the scene is rebuilt from scratch (not much to it).
+			function createNewObject() {
+
+				if (object) {
+				    scene.remove(object);
+				}
+				
+				const loader = new ColladaLoader();
+				const modelPath = '../models/' + effectController.startModel;
+				
+				loader.load(modelPath, function (collada) {
+					object = collada.scene;
+					object.rotation.x = Math.PI / 2; // Y-up loaded orientation
+					object.rotation.y = Math.PI;     // Optional: Rotate if needed
+					object.scale.set(300, 300, 300); // Adjust as needed
+
+					// Apply material recursively to all meshes in the loaded scene
+					object.traverse(function (child) {
+						if (child.isMesh) {
+							// Generate fallback UVs if needed for texture
+							if (shading === 'textured' && !child.geometry.attributes.uv) {
+								child.geometry.computeBoundingBox();
+								const bbox = child.geometry.boundingBox;
+								const size = new THREE.Vector3();
+								bbox.getSize(size);
+			
+								const uvAttr = [];
+								const posAttr = child.geometry.attributes.position;
+			
+								for (let i = 0; i < posAttr.count; i++) {
+									const x = posAttr.getX(i);
+									const y = posAttr.getY(i);
+									const u = (x - bbox.min.x) / size.x;
+									const v = (y - bbox.min.y) / size.y;
+									uvAttr.push(u, v);
+								}
+			
+								child.geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvAttr, 2));
+							}
+							child.material = materials[shading];
+						}
+					});
+					
+					scene.add(object);
+
+					render();
+				});
+
+			}
+
+			function loadModels() {
+				if (morphMesh) {
+					scene.remove(morphMesh);
+				}
+
+				const loader = new ColladaLoader();
+				Promise.all([
+					new Promise((resolve, reject) => {
+						loader.load('../models/' + effectController.startModel, collada => resolve(collada.scene), undefined, reject);
+					}),
+					new Promise((resolve, reject) => {
+						loader.load('../models/' + effectController.endModel, collada => resolve(collada.scene), undefined, reject);
+					})
+				]).then(([startScene, endScene]) => {
+					const startMesh = findFirstMesh(startScene);
+					const endMesh = findFirstMesh(endScene);
+
+					if (!startMesh || !endMesh) {
+						console.error("Could not find meshes inside the loaded scenes!");
+						return;
+					}
+
+					const startPos = startMesh.geometry.attributes.position;
+					const endPos = endMesh.geometry.attributes.position;
+
+					startVertices = [];
+					endVertices = [];
+
+					for (let i = 0; i < startPos.count; i++) {
+						startVertices.push(new Vec3(
+							startPos.getX(i),
+							startPos.getY(i),
+							startPos.getZ(i)
+						));
+					}
+
+					for (let i = 0; i < endPos.count; i++) {
+						endVertices.push(new Vec3(
+							endPos.getX(i),
+							endPos.getY(i),
+							endPos.getZ(i)
+						));
+					}
+
+					// Create a new morph mesh using the start mesh's geometry
+					const geometry = startMesh.geometry.clone();
+					geometry.attributes.position = geometry.attributes.position.clone();
+					geometry.attributes.position.needsUpdate = true;
+
+					const material = materials[effectController.newShading];
+					morphMesh = new THREE.Mesh(geometry, material);
+					morphMesh.rotation.y = Math.PI;
+					morphMesh.scale.set(300, 300, 300);
+
+					scene.add(morphMesh);
+					updateMorph();
+					render();
+				}).catch(err => {
+					console.error("Error loading models:", err);
+				});
+			}
+
+			function findFirstMesh(object) {
+				let mesh = null;
+				object.traverse(child => {
+					if (child.isMesh && !mesh) {
+						mesh = child;
+					}
+				});
+				return mesh;
+			}
+
+			function updateMorph() {
+				if (!morphMesh) return;
+
+				const morphedVertices = morphMeshes(startVertices, endVertices, effectController.morphAmount);
+				const position = morphMesh.geometry.attributes.position;
+
+				// Update the geometry with morphed vertices
+				for (let i = 0; i < position.count; i++) {
+					if (i < morphedVertices.length) {
+						position.setXYZ(i, morphedVertices[i].x, morphedVertices[i].y, morphedVertices[i].z);
+					}
+				}
+				position.needsUpdate = true;
+				render();
+			}
+
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize(window.innerWidth, window.innerHeight);
+				render();
+			}
+
+		</script>
+
+	</body>
+</html>
