@@ -89,6 +89,15 @@ std::vector<Vec3> morphMeshes(
     return result;
 }
 
+std::vector<Vec3> uniformSample(const std::vector<Vec3>& vertices, int sampleCount) {
+    std::vector<Vec3> sampled;
+    int step = vertices.size() / sampleCount;
+    for (int i = 0; i < sampleCount; ++i) {
+        sampled.push_back(vertices[i * step]);
+    }
+    return sampled;
+}
+
 class MeshDeformation {
     public:
         static void linearInterpolateMeshes(const std::vector<Vec3>& start, const std::vector<Vec3>& end, float t, std::vector<Vec3>& result) {
