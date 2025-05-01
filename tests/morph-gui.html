@@ -209,9 +209,16 @@
 			}
 
 			function loadModels() {
+			    // Remove existing morph mesh if present
 			    if (morphMesh) {
 			        scene.remove(morphMesh);
-			        morphMesh.geometry.dispose();
+			        morphMesh = null;
+			    }
+			
+			    // Remove initial object (teapot) if present
+			    if (object) {
+			        scene.remove(object);
+			        object = null;
 			    }
 			
 			    const loader = new ColladaLoader();
