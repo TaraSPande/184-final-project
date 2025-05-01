@@ -173,6 +173,12 @@
 			function loadModels() {
 				if (morphMesh) {
 					scene.remove(morphMesh);
+					morphMesh = null;
+				}
+				
+				if (object) {
+					scene.remove(object);
+					object = null;
 				}
 
 				const loader = new ColladaLoader();
@@ -221,6 +227,7 @@
 
 					const material = materials[effectController.newShading];
 					morphMesh = new THREE.Mesh(geometry, material);
+					morphMesh.rotation.x = Math.PI / 2;
 					morphMesh.rotation.y = Math.PI;
 					morphMesh.scale.set(300, 300, 300);
 
