@@ -190,3 +190,40 @@ void ICP(std::vector<Vec3>& source, const std::vector<Vec3>& target, int maxIter
         applyTransformation(source, translation, rotationMatrix);
     }
 }
+
+bool compareAnglePairs(const std::pair<float, Vec3>& a, const std::pair<float, Vec3>& b) {
+    return a.first < b.first;
+}
+
+// Vertice by angle in x and y plane
+std::vector<Vec3> orderVerticesByAngle(const std::vector<Vec3>& vertices) {
+    Vec3 centroid = calculateCentroid(vertices);
+    std::vector<std::pair<float, Vec3> > anglesAndVertices;
+
+    for (const auto& v : vertices) {
+        // Calculate angle in X-Y plane
+        float angle = std::atan2(v.y - centroid.y, v.x - centroid.x);
+        anglesAndVertices.push_back(std::make_pair(angle, v));
+    }
+
+    // Use named comparator function for sorting
+    std::sort(anglesAndVertices.begin(), anglesAndVertices.end(), compareAnglePairs);
+
+    std::vector<Vec3> orderedVertices;
+    for (const auto& pair : anglesAndVertices) {
+        orderedVertices.push_back(pair.second);
+    }
+    return orderedVertices;
+}
+
+
+// Ordered sampling
+std::vector<Vec3> orderedSample(const std::vector<Vec3>& vertices, int sampleCount) {
+    std::vector<Vec3> ordered = orderVerticesByAngle(vertices);
+    std::vector<Vec3> sampled;
+    int step = ordered.size() / sampleCount;
+    for (int i = 0; i < sampleCount; ++i) {
+        sampled.push_back(ordered[i * step]);
+    }
+    return sampled;
+}
