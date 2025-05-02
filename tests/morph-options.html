@@ -131,7 +131,7 @@
 				gui.add(effectController, 'startModel', [ 'teapot.dae', 'cow.dae', 'beetle.dae', 'bean.dae', 'beast.dae', 'quadball.dae' ]).name('Start Model').onChange(loadModels);
 				gui.add(effectController, 'endModel', [ 'teapot.dae', 'cow.dae', 'beetle.dae', 'bean.dae', 'beast.dae', 'quadball.dae' ]).name('End Model').onChange(loadModels);
 				gui.add(effectController, 'morphAmount', 0, 1).name('Morph').onChange(updateMorph);
-				gui.add(effectController, 'matchingMethod', ['original', 'unique', 'extremes', 'uni-ex', 'dust']).name('Algorithm').onChange(loadModels);
+				gui.add(effectController, 'matchingMethod', ['closest', 'unique', 'extremes', 'uni/ex', 'complete']).name('Algorithm').onChange(loadModels);
 			}
 
 
