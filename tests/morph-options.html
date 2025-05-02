@@ -207,7 +207,7 @@
 				    correspondence = OPT.findClosestPointsUnique(startVertices, endVertices);
 				} else if (effectController.matchingMethod === 'extremes') {
 				    correspondence = OPT.findClosestPointsBiasExtremes(startVertices, endVertices);
-				} else if (effectController.matchingMethod === 'uni-ex') {
+				} else if (effectController.matchingMethod === 'uni/ex') {
 				    correspondence = OPT.findClosestPointsBiasedUnique(startVertices, endVertices);
 				} else {
 				    correspondence = OPT.findClosestPointsOriginal(startVertices, endVertices);
@@ -250,7 +250,7 @@
 			    const position = morphMesh.geometry.attributes.position;
 			    const t = effectController.morphAmount;
 
-			    if (effectController.matchingMethod === 'dust') {
+			    if (effectController.matchingMethod === 'complete') {
 				    for (let i = 0; i < position.count; i++) {
 				        const x = (1 - t) * startVertices[i].x + t * endVertices[i].x;
 				        const y = (1 - t) * startVertices[i].y + t * endVertices[i].y;
