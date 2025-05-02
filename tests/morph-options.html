@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Mesh Morphing & Animation Toolkit</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link type="text/css" rel="stylesheet" href="main.css">
+	</head>
+	<body>
+		<div id="info">
+			Mesh Morphing & Animation Toolkit by Brandon Lai, Tamnhi Vu, Samuel German, Tara Pande
+		</div>
+
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "../build/three.module.js",
+					"three/addons/": "../jsm/"
+				}
+			}
+		</script>
+
+		<script type="module">
+
+			import * as THREE from 'three';
+			import * as OPT from "../backend/morph_options.js";
+
+			import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+			import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
+			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+			import { Vec3 } from "../backend/vertex.js";
+
+			let camera, scene, renderer;
+			let cameraControls;
+			let effectController;
+			let ambientLight, light;
+			let shading, textureCube;
+			const materials = {};
+
+			let startVertices = [];
+			let endVertices = [];
+			let morphMesh;
+
+			let correspondence = [];
+
+			init();
+			render();
+
+			function init() {
+
+				const container = document.createElement( 'div' );
+				document.body.appendChild( container );
+
+				const canvasWidth = window.innerWidth;
+				const canvasHeight = window.innerHeight;
+
+				// CAMERA
+				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 80000 );
+				camera.position.set( - 600, 550, 1300 );
+
+				// LIGHTS
+				ambientLight = new THREE.AmbientLight( 0x7c7c7c, 2.0 );
+
+				light = new THREE.DirectionalLight( 0xFFFFFF, 2.0 );
+				light.position.set( 0.32, 0.39, 0.7 );
+
+				// RENDERER
+				renderer = new THREE.WebGLRenderer( { antialias: true } );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( canvasWidth, canvasHeight );
+				container.appendChild( renderer.domElement );
+
+				// EVENTS
+				window.addEventListener( 'resize', onWindowResize );
+
+				// CONTROLS
+				cameraControls = new OrbitControls( camera, renderer.domElement );
+				cameraControls.addEventListener( 'change', render );
+
+				// REFLECTION MAP
+				const path = '../textures/cube/pisa/';
+				const urls = [ 'px.png', 'nx.png', 'py.png', 'ny.png', 'pz.png', 'nz.png' ];
+
+				textureCube = new THREE.CubeTextureLoader().setPath( path ).load( urls );
+
+				materials[ 'wireframe' ] = new THREE.MeshBasicMaterial( { wireframe: true } );
+				materials[ 'flat' ] = new THREE.MeshPhongMaterial( { specular: 0x000000, flatShading: true, side: THREE.DoubleSide } );
+				materials[ 'smooth' ] = new THREE.MeshLambertMaterial( { side: THREE.DoubleSide } );
+				materials[ 'glossy' ] = new THREE.MeshPhongMaterial( { color: 0xc0c0c0, specular: 0x404040, shininess: 300, side: THREE.DoubleSide } );
+				materials[ 'reflective' ] = new THREE.MeshPhongMaterial( { envMap: textureCube, side: THREE.DoubleSide } );
+
+				// scene itself
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color( 0xAAAAAA );
+
+				scene.add( ambientLight );
+				scene.add( light );
+
+				// GUI
+				setupGui();
+			}
+
+			// EVENT HANDLERS
+
+			function onWindowResize() {
+
+				const canvasWidth = window.innerWidth;
+				const canvasHeight = window.innerHeight;
+
+				renderer.setSize( canvasWidth, canvasHeight );
+
+				camera.aspect = canvasWidth / canvasHeight;
+				camera.updateProjectionMatrix();
+
+				render();
+
+			}
+
+			function setupGui() {
+
+				effectController = {
+					newShading: 'glossy',
+					startModel: 'teapot.dae',
+				    	endModel: 'cow.dae',
+				    	morphAmount: 0, // Slider between 0 and 1
+					matchingMethod: 'original'
+				};
+
+				const gui = new GUI();
+				gui.add( effectController, 'newShading', [ 'wireframe', 'flat', 'smooth', 'glossy', 'reflective' ] ).name( 'Shading' ).onChange( render );
+				gui.add(effectController, 'startModel', [ 'teapot.dae', 'cow.dae', 'beetle.dae', 'bean.dae', 'beast.dae', 'quadball.dae' ]).name('Start Model').onChange(loadModels);
+				gui.add(effectController, 'endModel', [ 'teapot.dae', 'cow.dae', 'beetle.dae', 'bean.dae', 'beast.dae', 'quadball.dae' ]).name('End Model').onChange(loadModels);
+				gui.add(effectController, 'morphAmount', 0, 1).name('Morph').onChange(updateMorph);
+				gui.add(effectController, 'matchingMethod', ['original', 'unique', 'extremes', 'uni-ex', 'dust']).name('Algorithm').onChange(loadModels);
+			}
+
+
+			function render() {
+
+				if (effectController.newShading !== shading ) {
+					shading = effectController.newShading;
+					loadModels();
+				}
+
+				// skybox is rendered separately, so that it is always behind the teapot.
+				if ( shading === 'reflective' ) {
+					scene.background = textureCube;
+				} else {
+					scene.background = null;
+				}
+				renderer.render( scene, camera );
+			}
+
+			function loadModels() {
+			    // Remove existing morph mesh if present
+			    if (morphMesh) {
+			        scene.remove(morphMesh);
+			        morphMesh = null;
+			    }
+			
+			    const loader = new ColladaLoader();
+			    const startPath = '../models/' + effectController.startModel;
+			    const endPath = '../models/' + effectController.endModel;
+			
+			    Promise.all([
+			        new Promise((resolve, reject) => {
+			            loader.load(startPath, collada => resolve(collada.scene), undefined, reject);
+			        }),
+			        new Promise((resolve, reject) => {
+			            loader.load(endPath, collada => resolve(collada.scene), undefined, reject);
+			        })
+			    ]).then(([startScene, endScene]) => {
+			
+			        const startMesh = findFirstMesh(startScene);
+			        const endMesh = findFirstMesh(endScene);
+			
+			        if (!startMesh || !endMesh) {
+			            console.error("Could not find meshes inside the loaded scenes!");
+			            return;
+			        }
+			
+			        const startPos = startMesh.geometry.attributes.position;
+			        const endPos = endMesh.geometry.attributes.position;
+			
+			        if (startPos.count !== endPos.count) {
+			            console.error("Start and end models have different vertex counts!");
+			            //return;
+			        }
+			
+			        startVertices = [];
+			        endVertices = [];
+			
+			        for (let i = 0; i < startPos.count; i++) {
+			            startVertices.push(new Vec3(
+			                startPos.getX(i),
+			                startPos.getY(i),
+			                startPos.getZ(i)
+			            ));
+			            endVertices.push(new Vec3(
+			                endPos.getX(i),
+			                endPos.getY(i),
+			                endPos.getZ(i)
+			            ));
+			        }
+
+				if (effectController.matchingMethod === 'unique') {
+				    correspondence = OPT.findClosestPointsUnique(startVertices, endVertices);
+				} else if (effectController.matchingMethod === 'extremes') {
+				    correspondence = OPT.findClosestPointsBiasExtremes(startVertices, endVertices);
+				} else if (effectController.matchingMethod === 'uni-ex') {
+				    correspondence = OPT.findClosestPointsBiasedUnique(startVertices, endVertices);
+				} else {
+				    correspondence = OPT.findClosestPointsOriginal(startVertices, endVertices);
+				}
+							
+			        // Create a new morph mesh
+			        const geometry = startMesh.geometry.clone();
+			        geometry.attributes.position = geometry.attributes.position.clone(); // important!
+			        geometry.attributes.position.needsUpdate = true;
+			
+			        const material = materials[effectController.newShading];
+			
+			        morphMesh = new THREE.Mesh(geometry, material);
+			        morphMesh.rotation.x = Math.PI / 2;
+			        morphMesh.rotation.y = Math.PI;
+			        morphMesh.scale.set(300, 300, 300);
+			
+			        scene.add(morphMesh);
+			
+			        updateMorph(); // Immediately morph to t=0
+			        render();
+			    }).catch(err => {
+			        console.error("Error loading models:", err);
+			    });
+			}
+
+			function findFirstMesh(object) {
+			    let mesh = null;
+			    object.traverse(child => {
+			        if (child.isMesh && !mesh) {
+			            mesh = child;
+			        }
+			    });
+			    return mesh;
+			}
+
+			function updateMorph() {
+			    if (!morphMesh) return;
+			
+			    const position = morphMesh.geometry.attributes.position;
+			    const t = effectController.morphAmount;
+
+			    if (effectController.matchingMethod === 'dust') {
+				    for (let i = 0; i < position.count; i++) {
+				        const x = (1 - t) * startVertices[i].x + t * endVertices[i].x;
+				        const y = (1 - t) * startVertices[i].y + t * endVertices[i].y;
+				        const z = (1 - t) * startVertices[i].z + t * endVertices[i].z;
+				        position.setXYZ(i, x, y, z);
+				    }
+			    } else {
+				    for (let i = 0; i < position.count; i++) {
+					const j = correspondence[i]; // index in endVertices
+					const x = (1 - t) * startVertices[i].x + t * endVertices[j].x;
+					const y = (1 - t) * startVertices[i].y + t * endVertices[j].y;
+					const z = (1 - t) * startVertices[i].z + t * endVertices[j].z;
+					position.setXYZ(i, x, y, z);
+				    }
+			    }
+			    position.needsUpdate = true;
+			    render();
+			}
+
+		</script>
+
+	</body>
+</html>
