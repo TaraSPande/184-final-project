@@ -128,8 +128,8 @@
 
 				const gui = new GUI();
 				gui.add( effectController, 'newShading', [ 'wireframe', 'flat', 'smooth', 'glossy', 'reflective' ] ).name( 'Shading' ).onChange( render );
-				gui.add(effectController, 'startModel', [ 'teapot.dae', 'cow.dae', 'beetle.dae', 'bean.dae', 'beast.dae', 'quadball.dae' ]).name('Start Model').onChange(loadModels);
-				gui.add(effectController, 'endModel', [ 'teapot.dae', 'cow.dae', 'beetle.dae', 'bean.dae', 'beast.dae', 'quadball.dae' ]).name('End Model').onChange(loadModels);
+				gui.add(effectController, 'startModel', [ 'teapot.dae', 'cow.dae', 'beetle.dae', 'bean.dae', 'input.dae', 'quadball.dae' ]).name('Start Model').onChange(loadModels);
+				gui.add(effectController, 'endModel', [ 'teapot.dae', 'cow.dae', 'beetle.dae', 'bean.dae', 'input.dae', 'quadball.dae' ]).name('End Model').onChange(loadModels);
 				gui.add(effectController, 'morphAmount', 0, 1).name('Morph').onChange(updateMorph);
 				gui.add(effectController, 'matchingMethod', ['closest', 'complete', 'unique', 'extremes', 'uni/ex']).name('Algorithm').onChange(loadModels);
 			}
